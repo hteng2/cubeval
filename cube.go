@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type Color uint8
 
@@ -26,21 +29,26 @@ const (
 	L
 )
 
+type Slice uint8
+
+const (
+	M Slice = iota
+	S
+	E
+)
+
 type Edge struct {
 	colors      [2]Color
-	position    [2]Face
 	orientation uint8
 }
 
 type Corner struct {
 	colors      [3]Color
-	position    [3]Face
 	orientation uint8
 }
 
 type Center struct {
-	color    Color
-	position Face
+	color Color
 }
 
 type Cube struct {
@@ -52,30 +60,26 @@ type Cube struct {
 func NewCubeDefault() Cube {
 	var edges [12]Edge
 
-	var slice uint8
+	var slice Slice
 
 	// M slice
-	slice = 0
+	slice = M
 	for UD := range uint8(2) {
 		for FB := range uint8(2) {
-			index := slice + 3*UD + 6*FB
+			index := uint8(slice) + 3*UD + 6*FB
 
 			var edge Edge
 
 			if UD == 0 {
 				edge.colors[0] = White
-				edge.position[0] = U
 			} else {
 				edge.colors[0] = Yellow
-				edge.position[0] = D
 			}
 
 			if FB == 0 {
 				edge.colors[1] = Green
-				edge.position[1] = F
 			} else {
 				edge.colors[1] = Blue
-				edge.position[1] = B
 			}
 
 			edge.orientation = 0
@@ -85,27 +89,23 @@ func NewCubeDefault() Cube {
 	}
 
 	// S slice
-	slice = 1
+	slice = S
 	for UD := range uint8(2) {
 		for RL := range uint8(2) {
-			index := slice + 3*UD + 6*RL
+			index := uint8(slice) + 3*UD + 6*RL
 
 			var edge Edge
 
 			if UD == 0 {
 				edge.colors[0] = White
-				edge.position[0] = U
 			} else {
 				edge.colors[0] = Yellow
-				edge.position[0] = D
 			}
 
 			if RL == 0 {
 				edge.colors[1] = Red
-				edge.position[1] = R
 			} else {
 				edge.colors[1] = Orange
-				edge.position[1] = L
 			}
 
 			edge.orientation = 0
@@ -115,27 +115,23 @@ func NewCubeDefault() Cube {
 	}
 
 	// E slice
-	slice = 2
+	slice = E
 	for FB := range uint8(2) {
 		for RL := range uint8(2) {
-			index := slice + 3*FB + 6*RL
+			index := uint8(slice) + 3*FB + 6*RL
 
 			var edge Edge
 
 			if FB == 0 {
 				edge.colors[0] = Green
-				edge.position[0] = F
 			} else {
 				edge.colors[0] = Blue
-				edge.position[0] = B
 			}
 
 			if RL == 0 {
 				edge.colors[1] = Red
-				edge.position[1] = R
 			} else {
 				edge.colors[1] = Orange
-				edge.position[1] = L
 			}
 
 			edge.orientation = 0
@@ -155,26 +151,26 @@ func NewCubeDefault() Cube {
 
 				if UD == 0 {
 					corner.colors[0] = White
-					corner.position[0] = U
 				} else {
 					corner.colors[0] = Yellow
-					corner.position[0] = D
 				}
 
 				if FB == 0 {
 					corner.colors[1] = Green
-					corner.position[1] = F
 				} else {
 					corner.colors[1] = Blue
-					corner.position[1] = B
 				}
 
 				if RL == 0 {
 					corner.colors[2] = Red
-					corner.position[2] = R
 				} else {
 					corner.colors[2] = Orange
-					corner.position[2] = L
+				}
+
+				if (UD+FB+RL)%2 == 0 {
+					tmp := corner.colors[1]
+					corner.colors[1] = corner.colors[2]
+					corner.colors[2] = tmp
 				}
 
 				corner.orientation = 0
@@ -185,24 +181,61 @@ func NewCubeDefault() Cube {
 	}
 
 	centers := [6]Center{
-		{White, U},
-		{Yellow, D},
-		{Green, F},
-		{Blue, B},
-		{Red, R},
-		{Orange, L},
+		{White},
+		{Yellow},
+		{Green},
+		{Blue},
+		{Red},
+		{Orange},
 	}
 
 	return Cube{edges, corners, centers}
 }
 
-func (cube Cube) printable(color Color) string {
-	//    .. .. ..
-	//   .. .. .. -
-	//  .. .. .. --
-	// ## ## ## ---
-	// ## ## ## --
-	// ## ## ## -
+func (cube *Cube) getEdge(slice Slice, coord1 Face, coord2 Face) (Edge, error) {
+	if cube == nil ||
+		(slice == M &&
+			coord1 != U && coord1 != D &&
+			coord2 != F && coord2 != B) ||
+		(slice == S &&
+			coord1 != U && coord1 != D &&
+			coord2 != R && coord2 != L) ||
+		(slice == E &&
+			coord1 != F && coord1 != B &&
+			coord2 != R && coord2 != L) {
+		return Edge{}, errors.New("Cube.getEdge: invalid parameters")
+	}
+
+	index := uint8(slice) + 3*(uint8(coord1)%2) + 6*(uint8(coord2)%2)
+	return cube.edges[index], nil
+}
+
+func (cube *Cube) getCorner(UD Face, FB Face, RL Face) (Corner, error) {
+	if cube == nil ||
+		(UD != U && UD != D) ||
+		(FB != F && FB != B) ||
+		(RL != R && RL != L) {
+		return Corner{}, errors.New("Cube.getCorner: invalid parameters")
+	}
+
+	index := (uint8(UD) % 2) + 2*(uint8(FB)%2) + 4*(uint8(RL)%2)
+	return cube.corners[index], nil
+}
+
+func (cube *Cube) getCenter(face Face) (Center, error) {
+	if cube == nil {
+		return Center{}, errors.New("Cube.getCenter: invalid parameters")
+	}
+	return cube.centers[face], nil
+}
+
+func (cube *Cube) stringSide() string {
+	//    -- -- --
+	//   -- -- --/
+	//  -- -- --//
+	// ## ## ##///
+	// ## ## ##//
+	// ## ## ##/
 
 	colors := [8]string{
 		"\033[1;37m",
@@ -217,5 +250,113 @@ func (cube Cube) printable(color Color) string {
 
 	reset := "\033[0m"
 
-	return fmt.Sprintln(colors[color], cube, reset)
+	e := &cube.edges
+	c := &cube.corners
+	h := &cube.centers
+
+	result := ""
+
+	result += fmt.Sprintf("   %s-- %s-- %s--\n",
+		colors[c[6].colors[c[6].orientation]],
+		colors[e[6].colors[e[6].orientation]],
+		colors[c[2].colors[c[2].orientation]])
+
+	result += fmt.Sprintf("  %s-- %s-- %s--%s/\n",
+		colors[e[7].colors[e[7].orientation]],
+		colors[h[0].color],
+		colors[e[1].colors[e[1].orientation]],
+		colors[c[2].colors[(2+c[2].orientation)%3]])
+
+	result += fmt.Sprintf(" %s-- %s-- %s--%s/%s/\n",
+		colors[c[4].colors[c[4].orientation]],
+		colors[e[0].colors[e[0].orientation]],
+		colors[c[0].colors[c[0].orientation]],
+		colors[e[1].colors[1-e[1].orientation]],
+		colors[e[5].colors[1-e[5].orientation]])
+
+	result += fmt.Sprintf("%s## %s## %s##%s/%s/%s/\n",
+		colors[c[4].colors[(1+c[4].orientation)%3]],
+		colors[e[0].colors[1-e[0].orientation]],
+		colors[c[0].colors[(2+c[0].orientation)%3]],
+		colors[c[0].colors[(1+c[0].orientation)%3]],
+		colors[h[4].color],
+		colors[c[3].colors[(1+c[3].orientation)%3]])
+
+	result += fmt.Sprintf("%s## %s## %s##%s/%s/\n",
+		colors[e[8].colors[e[8].orientation]],
+		colors[h[2].color],
+		colors[e[2].colors[e[2].orientation]],
+		colors[e[2].colors[1-e[2].orientation]],
+		colors[e[5].colors[1-e[3].orientation]])
+
+	result += fmt.Sprintf("%s## %s## %s##%s/\n",
+		colors[c[5].colors[(2+c[5].orientation)%3]],
+		colors[e[3].colors[1-e[3].orientation]],
+		colors[c[1].colors[(1+c[1].orientation)%3]],
+		colors[c[1].colors[(2+c[1].orientation)%3]])
+
+	result += reset
+	return result
+}
+
+func (cube *Cube) stringTop() string {
+	//   -- -- --
+	// | ## ## ## |
+	// | ## ## ## |
+	// | ## ## ## |
+	//   -- -- --
+
+	colors := [8]string{
+		"\033[1;37m",
+		"\033[1;33m",
+		"\033[1;32m",
+		"\033[1;34m",
+		"\033[1;31m",
+		"\033[0;33m",
+		"\033[0;30m",
+		"\033[0;37m",
+	}
+
+	reset := "\033[0m"
+
+	e := &cube.edges
+	c := &cube.corners
+	h := &cube.centers
+
+	result := ""
+
+	result += fmt.Sprintf("  %s-- %s-- %s--\n",
+		colors[c[6].colors[(2+c[6].orientation)%3]],
+		colors[e[6].colors[1-e[6].orientation]],
+		colors[c[2].colors[(1+c[2].orientation)%3]])
+
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+		colors[c[6].colors[(1+c[6].orientation)%3]],
+		colors[c[6].colors[c[6].orientation]],
+		colors[e[6].colors[e[6].orientation]],
+		colors[c[2].colors[c[2].orientation]],
+		colors[c[2].colors[(2+c[2].orientation)%3]])
+
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+		colors[e[7].colors[1-e[7].orientation]],
+		colors[e[7].colors[e[7].orientation]],
+		colors[h[0].color],
+		colors[e[1].colors[e[1].orientation]],
+		colors[e[1].colors[1-e[1].orientation]])
+
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+		colors[c[4].colors[(2+c[4].orientation)%3]],
+		colors[c[4].colors[c[4].orientation]],
+		colors[e[0].colors[e[0].orientation]],
+		colors[c[0].colors[c[0].orientation]],
+		colors[c[0].colors[(1+c[0].orientation)%3]])
+
+	result += fmt.Sprintf("  %s-- %s-- %s--\n",
+		colors[c[4].colors[(1+c[4].orientation)%3]],
+		colors[e[0].colors[1-e[0].orientation]],
+		colors[c[0].colors[(2+c[0].orientation)%3]])
+
+	result += reset
+
+	return result
 }
