@@ -1,15 +1,13 @@
 package main
 
-import (
-	"fmt"
-)
-
 func main() {
-	cube := NewCubeDefault()
-
-	fmt.Println(cube.stringSide())
-
-	fmt.Println(cube.stringTop())
-
-	fmt.Println("Cubeval explorer")
+	cube := InitCube()
+	
+	cmdHandler := MakeCmdHandler(&cube)
+	
+	t := InitTerm(&cmdHandler)
+	
+	defer t.Restore()
+	
+	t.Loop()
 }

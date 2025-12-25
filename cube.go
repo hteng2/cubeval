@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -57,7 +56,7 @@ type Cube struct {
 	centers [6]Center
 }
 
-func NewCubeDefault() Cube {
+func InitCube() Cube {
 	var edges [12]Edge
 
 	var slice Slice
@@ -192,41 +191,151 @@ func NewCubeDefault() Cube {
 	return Cube{edges, corners, centers}
 }
 
-func (cube *Cube) getEdge(slice Slice, coord1 Face, coord2 Face) (Edge, error) {
-	if cube == nil ||
-		(slice == M &&
-			coord1 != U && coord1 != D &&
-			coord2 != F && coord2 != B) ||
-		(slice == S &&
-			coord1 != U && coord1 != D &&
-			coord2 != R && coord2 != L) ||
-		(slice == E &&
-			coord1 != F && coord1 != B &&
-			coord2 != R && coord2 != L) {
-		return Edge{}, errors.New("Cube.getEdge: invalid parameters")
-	}
+func (cube *Cube) cycleEdges(indices [4]uint8, flip bool) {
+	tmp := cube.edges[indices[3]]
+	cube.edges[indices[3]] = cube.edges[indices[2]]
+	cube.edges[indices[2]] = cube.edges[indices[1]]
+	cube.edges[indices[1]] = cube.edges[indices[0]]
+	cube.edges[indices[0]] = tmp
 
-	index := uint8(slice) + 3*(uint8(coord1)%2) + 6*(uint8(coord2)%2)
-	return cube.edges[index], nil
+	if flip {
+		for _, i := range indices {
+			cube.edges[i].orientation = 1 - cube.edges[i].orientation
+		}
+	}
 }
 
-func (cube *Cube) getCorner(UD Face, FB Face, RL Face) (Corner, error) {
-	if cube == nil ||
-		(UD != U && UD != D) ||
-		(FB != F && FB != B) ||
-		(RL != R && RL != L) {
-		return Corner{}, errors.New("Cube.getCorner: invalid parameters")
-	}
+func (cube *Cube) cycleCorners(indices [4]uint8, twist uint8) {
+	tmp := cube.corners[indices[3]]
+	cube.corners[indices[3]] = cube.corners[indices[2]]
+	cube.corners[indices[2]] = cube.corners[indices[1]]
+	cube.corners[indices[1]] = cube.corners[indices[0]]
+	cube.corners[indices[0]] = tmp
 
-	index := (uint8(UD) % 2) + 2*(uint8(FB)%2) + 4*(uint8(RL)%2)
-	return cube.corners[index], nil
+	cube.corners[indices[0]].orientation += twist
+	cube.corners[indices[0]].orientation %= 3
+
+	cube.corners[indices[1]].orientation += 3 - twist
+	cube.corners[indices[1]].orientation %= 3
+
+	cube.corners[indices[2]].orientation += twist
+	cube.corners[indices[2]].orientation %= 3
+
+	cube.corners[indices[3]].orientation += 3 - twist
+	cube.corners[indices[3]].orientation %= 3
 }
 
-func (cube *Cube) getCenter(face Face) (Center, error) {
-	if cube == nil {
-		return Center{}, errors.New("Cube.getCenter: invalid parameters")
+func (cube *Cube) cycleCenters(indices [4]uint8) {
+	tmp := cube.centers[indices[3]]
+	cube.centers[indices[3]] = cube.centers[indices[2]]
+	cube.centers[indices[2]] = cube.centers[indices[1]]
+	cube.centers[indices[1]] = cube.centers[indices[0]]
+	cube.centers[indices[0]] = tmp
+}
+
+func (cube *Cube) doU() {
+	cube.cycleEdges(
+		[4]uint8{0, 7, 6, 1},
+		false,
+	)
+	cube.cycleCorners(
+		[4]uint8{0, 4, 6, 2},
+		0,
+	)
+}
+
+func (cube *Cube) doD() {
+	cube.cycleEdges(
+		[4]uint8{3, 4, 9, 10},
+		false,
+	)
+	cube.cycleCorners(
+		[4]uint8{0, 4, 6, 2},
+		0,
+	)
+}
+
+func (cube *Cube) doF() {
+	cube.cycleEdges(
+		[4]uint8{0, 2, 3, 8},
+		true,
+	)
+	cube.cycleCorners(
+		[4]uint8{0, 1, 5, 4},
+		2,
+	)
+}
+
+func (cube *Cube) doB() {
+	cube.cycleEdges(
+		[4]uint8{6, 11, 9, 5},
+		true,
+	)
+	cube.cycleCorners(
+		[4]uint8{2, 6, 7, 3},
+		1,
+	)
+}
+
+func (cube *Cube) doR() {
+	cube.cycleEdges(
+		[4]uint8{1, 5, 4, 2},
+		false,
+	)
+	cube.cycleCorners(
+		[4]uint8{0, 2, 3, 1},
+		1,
+	)
+}
+
+func (cube *Cube) doL() {
+	cube.cycleEdges(
+		[4]uint8{7, 8, 10, 11},
+		false,
+	)
+	cube.cycleCorners(
+		[4]uint8{4, 5, 7, 6},
+		2,
+	)
+}
+
+func (cube *Cube) DoMove(move string) error {
+	n := 1
+
+	if len(move) == 2 {
+		switch move[1] {
+		case '2':
+			n = 2
+		case '\'':
+			n = 3
+		default:
+			return fmt.Errorf("cube.DoMove: illegal move %s", move)
+		}
 	}
-	return cube.centers[face], nil
+
+	if len(move) > 2 {
+		return fmt.Errorf("cube.DoMove: illegal move %s", move)
+	}
+
+	for range n {
+		switch move[0] {
+		case 'U':
+			cube.doU()
+		case 'D':
+			cube.doD()
+		case 'F':
+			cube.doF()
+		case 'B':
+			cube.doB()
+		case 'R':
+			cube.doR()
+		case 'L':
+			cube.doL()
+		default:
+			return fmt.Errorf("cube.DoMove: illegal move %s", move)
+		}
+	}
+	return nil
 }
 
 func (cube *Cube) stringSide() string {
@@ -256,25 +365,25 @@ func (cube *Cube) stringSide() string {
 
 	result := ""
 
-	result += fmt.Sprintf("   %s-- %s-- %s--\n",
+	result += fmt.Sprintf("   %s-- %s-- %s--\r\n",
 		colors[c[6].colors[c[6].orientation]],
 		colors[e[6].colors[e[6].orientation]],
 		colors[c[2].colors[c[2].orientation]])
 
-	result += fmt.Sprintf("  %s-- %s-- %s--%s/\n",
+	result += fmt.Sprintf("  %s-- %s-- %s--%s/\r\n",
 		colors[e[7].colors[e[7].orientation]],
 		colors[h[0].color],
 		colors[e[1].colors[e[1].orientation]],
 		colors[c[2].colors[(2+c[2].orientation)%3]])
 
-	result += fmt.Sprintf(" %s-- %s-- %s--%s/%s/\n",
+	result += fmt.Sprintf(" %s-- %s-- %s--%s/%s/\r\n",
 		colors[c[4].colors[c[4].orientation]],
 		colors[e[0].colors[e[0].orientation]],
 		colors[c[0].colors[c[0].orientation]],
 		colors[e[1].colors[1-e[1].orientation]],
 		colors[e[5].colors[1-e[5].orientation]])
 
-	result += fmt.Sprintf("%s## %s## %s##%s/%s/%s/\n",
+	result += fmt.Sprintf("%s## %s## %s##%s/%s/%s/\r\n",
 		colors[c[4].colors[(1+c[4].orientation)%3]],
 		colors[e[0].colors[1-e[0].orientation]],
 		colors[c[0].colors[(2+c[0].orientation)%3]],
@@ -282,14 +391,14 @@ func (cube *Cube) stringSide() string {
 		colors[h[4].color],
 		colors[c[3].colors[(1+c[3].orientation)%3]])
 
-	result += fmt.Sprintf("%s## %s## %s##%s/%s/\n",
+	result += fmt.Sprintf("%s## %s## %s##%s/%s/\r\n",
 		colors[e[8].colors[e[8].orientation]],
 		colors[h[2].color],
 		colors[e[2].colors[e[2].orientation]],
 		colors[e[2].colors[1-e[2].orientation]],
-		colors[e[5].colors[1-e[3].orientation]])
+		colors[e[4].colors[1-e[4].orientation]])
 
-	result += fmt.Sprintf("%s## %s## %s##%s/\n",
+	result += fmt.Sprintf("%s## %s## %s##%s/\r\n",
 		colors[c[5].colors[(2+c[5].orientation)%3]],
 		colors[e[3].colors[1-e[3].orientation]],
 		colors[c[1].colors[(1+c[1].orientation)%3]],
@@ -325,33 +434,33 @@ func (cube *Cube) stringTop() string {
 
 	result := ""
 
-	result += fmt.Sprintf("  %s-- %s-- %s--\n",
+	result += fmt.Sprintf("  %s-- %s-- %s--\r\n",
 		colors[c[6].colors[(2+c[6].orientation)%3]],
 		colors[e[6].colors[1-e[6].orientation]],
 		colors[c[2].colors[(1+c[2].orientation)%3]])
 
-	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\r\n",
 		colors[c[6].colors[(1+c[6].orientation)%3]],
 		colors[c[6].colors[c[6].orientation]],
 		colors[e[6].colors[e[6].orientation]],
 		colors[c[2].colors[c[2].orientation]],
 		colors[c[2].colors[(2+c[2].orientation)%3]])
 
-	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\r\n",
 		colors[e[7].colors[1-e[7].orientation]],
 		colors[e[7].colors[e[7].orientation]],
 		colors[h[0].color],
 		colors[e[1].colors[e[1].orientation]],
 		colors[e[1].colors[1-e[1].orientation]])
 
-	result += fmt.Sprintf("%s| %s## %s## %s## %s|\n",
+	result += fmt.Sprintf("%s| %s## %s## %s## %s|\r\n",
 		colors[c[4].colors[(2+c[4].orientation)%3]],
 		colors[c[4].colors[c[4].orientation]],
 		colors[e[0].colors[e[0].orientation]],
 		colors[c[0].colors[c[0].orientation]],
 		colors[c[0].colors[(1+c[0].orientation)%3]])
 
-	result += fmt.Sprintf("  %s-- %s-- %s--\n",
+	result += fmt.Sprintf("  %s-- %s-- %s--\r\n",
 		colors[c[4].colors[(1+c[4].orientation)%3]],
 		colors[e[0].colors[1-e[0].orientation]],
 		colors[c[0].colors[(2+c[0].orientation)%3]])
